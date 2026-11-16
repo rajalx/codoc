@@ -161,7 +161,7 @@ export function HomeScreen({ onOpen }: { onOpen: (docId: string) => void }) {
    */
   const deleteDoc = async (id: string) => {
     setDeleteId(null)
-    await fetch(`/api/documents/${id}`, { method: 'DELETE' }).catch(() => {})
+    await fetch(`/api/documents/${id}`, { method: 'DELETE' }).catch(() => { })
     setDocs((d) => (d ? d.filter((x) => x.id !== id) : d))
   }
 
@@ -192,9 +192,9 @@ export function HomeScreen({ onOpen }: { onOpen: (docId: string) => void }) {
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Your documents</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">My Workspace</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Open one in two browser windows to watch real-time collaboration happen.
+              Manage and collaborate on your documents.
             </p>
           </div>
           <Button
@@ -287,7 +287,6 @@ export function HomeScreen({ onOpen }: { onOpen: (docId: string) => void }) {
             <Users className="h-3.5 w-3.5" />
             CoDoc — real-time collaborative Markdown editor
           </span>
-          <span>Operational transform sync · socket.io · PostgreSQL</span>
         </div>
       </footer>
 

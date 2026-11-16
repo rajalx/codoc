@@ -1,7 +1,7 @@
-# CoDoc — Real-Time Collaborative Markdown Editor
+# CoDoc Real-Time Collaborative Markdown Editor
 
 > A Google Docs–style collaborative Markdown editor with **Operational Transformation (OT)**,
-> live cursors, presence awareness, and version history — built with Next.js, Socket.IO
+> live cursors, presence awareness, and version history built with Next.js, Socket.IO
 > and PostgreSQL.
 
 ![Status](https://img.shields.io/badge/status-active--development-blue)
@@ -39,7 +39,7 @@
 ### Description
 
 **CoDoc** is a real-time collaborative Markdown editor that lets multiple users edit the
-same document simultaneously — with every keystroke synchronized across all browsers
+same document simultaneously with every keystroke synchronized across all browsers
 **without refreshing the page**, just like Google Docs.
 
 Under the hood, CoDoc implements an **Operational Transformation (OT)** engine: the
@@ -50,11 +50,11 @@ version snapshots are persisted to PostgreSQL.
 
 ### Objectives
 
-- ✅ Develop a collaborative Markdown editor supporting simultaneous multi-user editing.
-- ✅ Implement real-time document synchronization using **Operational Transformation**.
-- ✅ Provide live cursors and presence awareness so editors can see each other working.
-- ✅ Persist documents, operation history, and version snapshots in **PostgreSQL**.
-- ✅ Demonstrate collaborative software development using **Git / GitHub** (feature
+- Develop a collaborative Markdown editor supporting simultaneous multi-user editing.
+- Implement real-time document synchronization using **Operational Transformation**.
+- Provide live cursors and presence awareness so editors can see each other working.
+- Persist documents, operation history, and version snapshots in **PostgreSQL**.
+- Demonstrate collaborative software development using **Git / GitHub** (feature
   branches, pull requests, code review) across a two-member team.
 
 ---
@@ -111,7 +111,7 @@ version snapshots are persisted to PostgreSQL.
   the *revision counter*: it applies operations in server order, transforms late batches
   forward, relays cursors/presence, and writes content + snapshots to PostgreSQL.
 - The **OT core** (`src/lib/ot-core.ts`) is one shared module used by both the browser and
-  the server — verified for convergence by a fuzz test (`scripts/ot-fuzz.ts`).
+  the server verified for convergence by a fuzz test (`scripts/ot-fuzz.ts`).
 
 ---
 
@@ -191,7 +191,7 @@ bun install        # or: npm install
 
 ### Database Setup
 
-1. **Configure the connection** — copy the environment template and edit it:
+1. **Configure the connection** copy the environment template and edit it:
 
    ```bash
    cp env.example .env
@@ -222,13 +222,13 @@ bun install        # or: npm install
 
 ### Running the Application
 
-Open **two terminals** — the app and the sync service run as separate processes:
+Open **two terminals** - the app and the sync service run as separate processes:
 
 ```bash
-# Terminal 1 — Next.js app + REST API (http://localhost:3000)
+# Terminal 1 - Next.js app + REST API (http://localhost:3000)
 bun run dev
 
-# Terminal 2 — Socket.IO sync service (ws://localhost:3003)
+# Terminal 2 - Socket.IO sync service (ws://localhost:3003)
 bun run sync
 ```
 
@@ -251,7 +251,7 @@ bun run start
 # OT convergence fuzz test (shared OT core, thousands of random op interleavings)
 bun run test:ot
 
-# End-to-end sync test — requires dev server + sync service running
+# End-to-end sync test - requires dev server + sync service running
 bun run test:e2e
 ```
 
@@ -288,15 +288,13 @@ insert/delete operations, all replicas transform and converge to the **same fina
 
 ## Screenshots
 
-> 📸 *Add your screenshots to a `docs/screenshots/` folder and they will render here.*
-
 | Screen | Screenshot |
 |--------|-----------|
-| Home dashboard — document list with previews | `![Home](docs/screenshots/home.png)` |
-| Collaborative editor — two users editing live | `![Editor](docs/screenshots/editor.png)` |
-| Presence bar — live cursors and user colors | `![Presence](docs/screenshots/presence.png)` |
-| Version timeline — snapshots and restore | `![Versions](docs/screenshots/versions.png)` |
-| Markdown preview pane | `![Preview](docs/screenshots/preview.png)` |
+| Home dashboard - document list with previews | ![Home](docs/screenshots/home.png) |
+| Collaborative editor - two users editing live | ![Editor](docs/screenshots/editor.png) |
+| Presence bar - live cursors and user colors | ![Presence](docs/screenshots/presence.png) |
+| Version timeline - snapshots and restore | ![Versions](docs/screenshots/versions.png) |
+| Markdown preview pane | ![Preview](docs/screenshots/preview.png) |
 
 To capture them: run the app (`bun run dev && bun run sync`), open the home screen and
 the editor in two side-by-side windows, and save screenshots into `docs/screenshots/`.
@@ -306,7 +304,7 @@ the editor in two side-by-side windows, and save screenshots into `docs/screensh
 ## Team Members & Contributions
 
 This project was developed as a **two-member group assignment** (SEC101, MCA), following
-a Git feature-branch workflow — each member worked on a dedicated feature branch merged
+a Git feature-branch workflow,each member worked on a dedicated feature branch merged
 via pull requests ([#1](https://github.com/rajalx/codoc/pull/1), [#2](https://github.com/rajalx/codoc/pull/2)).
 
 | Member | Role | Key Contributions |
@@ -318,8 +316,8 @@ via pull requests ([#1](https://github.com/rajalx/codoc/pull/1), [#2](https://gi
 
 | Member | Commits | Lines added | Focus area |
 |--------|---------|-------------|-----------|
-| Raja Lairencha | 12 | ~5,300+ | Backend — OT engine, sync service, REST API, database, tests |
-| Ganesh Kumar | 8 | ~7,100+ | Frontend — UI library, theming, application screens |
+| Raja Lairencha | 12 | ~5,300+ | Backend - OT engine, sync service, REST API, database, tests |
+| Ganesh Kumar | 8 | ~7,100+ | Frontend - UI library, theming, application screens |
 
 ---
 
@@ -348,7 +346,7 @@ via pull requests ([#1](https://github.com/rajalx/codoc/pull/1), [#2](https://gi
 
 <div align="center">
 
-**CoDoc** — built with ❤️ by [@rajalx](https://github.com/rajalx) & Ganesh Kumar
+**CoDoc** - built with ❤️ by [@rajalx](https://github.com/rajalx) & Ganesh Kumar
 
 ⭐ Star this repo if you found it useful!
 
