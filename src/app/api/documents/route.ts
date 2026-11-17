@@ -11,28 +11,59 @@
  * `Document.revision`, `OperationEntry` rows and `DocumentVersion`
  * snapshots. REST handlers therefore never mutate content or revision
  * while a session is active.
+ *
+ * Visibility model (share-key collaboration): there is no authentication,
+ * so identity is the display name the client presents (`?user=` for reads,
+ * `owner` in the create body). GET returns only documents the user can
+ * see: owned by them, shared with them via the Collaborator table, or
+ * "public" legacy rows with an empty ownerName (the seeded Welcome doc).
  */
 
+import { randomBytes } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
 /**
- * GET /api/documents
+ * Generates an 8-character share key from an unambiguous alphabet
+ * (no 0/O, 1/l/I) so keys survive being read out or copied by hand.
+ * Lowercase; compared case-insensitively by the join endpoint.
+ */
+export function newShareKey(): string {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
+  const bytes = randomBytes(8)
+  let key = ''
+  for (let i = 0; i < 8; i++) key += alphabet[bytes[i] % alphabet.length]
+  return key
+}
+
+/**
+ * Normalizes a display name the way every handler stores/compares it:
+ * trimmed and capped at 40 chars (matching the client's NameDialog cap).
+ */
+function normName(v: unknown): string {
+  return typeof v === 'string' ? v.trim().slice(0, 40) : ''
+}
+
+/**
+ * GET /api/documents?user=<display name>
  *
- * Lists every document with a small text preview for the home screen.
+ * Lists the documents visible to `user` with a small text preview for the
+ * home screen: owned by them, shared with them (Collaborator rows), or
+ * public (ownerName "" — the seeded Welcome document). Without a `user`
+ * parameter only public documents are returned (nothing personal leaks).
  * Side effect: on the very first call against an empty database, seeds the
  * "Welcome to CoDoc" document (see WELCOME_CONTENT below).
  *
- * Request shape: none (no query parameters consumed).
- *
  * Response:
- *   200 — array of { id, title, revision, updatedAt, preview, chars }.
- *         `preview` is the markdown content stripped of syntax characters,
- *         truncated to 120 chars; `chars` is the raw content length.
+ *   200 — array of { id, title, revision, updatedAt, preview, chars,
+ *         owner, role }, newest-first by updatedAt. `owner` is the owner's
+ *         display name; `role` is "owner" | "collaborator" | "public".
  *   500 — { error: "Failed to load documents" } on any database failure.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const user = normName(req.nextUrl.searchParams.get('user'))
+
     // Seed the welcome doc on first ever load. A Postgres advisory lock
     // prevents two simultaneous first-visitors from double-seeding.
     // pg_advisory_xact_lock is transaction-scoped: it is released
@@ -49,9 +80,14 @@ export async function GET() {
       }
     })
 
-    // Read after the seed transaction completes so the welcome document
-    // appears in this same first response.
+    // Visibility filter: public docs + docs I own + docs shared with me.
     const documents = await db.document.findMany({
+      where: {
+        OR: [
+          { ownerName: '' },
+          ...(user ? [{ ownerName: user }, { collaborators: { some: { userName: user } } }] : []),
+        ],
+      },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
@@ -59,6 +95,7 @@ export async function GET() {
         revision: true,
         updatedAt: true,
         content: true,
+        ownerName: true,
       },
     })
 
@@ -72,6 +109,8 @@ export async function GET() {
         // reads as plain text; trimmed and capped at 120 chars.
         preview: (d.content ?? '').replace(/[#>*`\-]/g, '').trim().slice(0, 120),
         chars: (d.content ?? '').length,
+        owner: d.ownerName,
+        role: d.ownerName === '' ? 'public' : d.ownerName === user ? 'owner' : 'collaborator',
       }))
     )
   } catch (err) {
@@ -178,22 +217,25 @@ this page — try it from two windows at once.
 /**
  * POST /api/documents
  *
- * Creates a new document with a starter Markdown body.
+ * Creates a new document with a starter Markdown body, owned by the
+ * creator and carrying a fresh share key for invites.
  *
- * Request shape: JSON body `{ title?: string }`. Missing title, an empty
- * title, or an unparseable body falls back to "Untitled document"; a
- * provided title is trimmed and truncated to 120 characters.
+ * Request shape: JSON body `{ title?: string, owner?: string }`. Missing
+ * title, an empty title, or an unparseable body falls back to "Untitled
+ * document"; a provided title is trimmed and truncated to 120 characters.
+ * `owner` is the creator's display name (empty owner = public doc).
  *
  * Response:
- *   201 — { id, title }.
+ *   201 — { id, title, shareKey }.
  *   500 — { error: "Failed to create document" } on database failure.
  *
  * Side effects: inserts a Document row with the default content template
- * (newDocTemplate above). The row starts at revision 0; the sync service
- * takes over content and revision ownership as soon as a client joins the
- * document's room. Note: the created content never enters the
- * OperationEntry audit log — it exists before any sync session for this
- * document begins.
+ * (newDocTemplate above), `ownerName` from the body, and a generated
+ * shareKey (retried on the unlikely key collision). The row starts at
+ * revision 0; the sync service takes over content and revision ownership
+ * as soon as a client joins the document's room. Note: the created content
+ * never enters the OperationEntry audit log — it exists before any sync
+ * session for this document begins.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -203,13 +245,33 @@ export async function POST(req: NextRequest) {
     const title = typeof body?.title === 'string' && body.title.trim().length > 0
       ? body.title.trim().slice(0, 120)
       : 'Untitled document'
-    const doc = await db.document.create({
-      data: {
-        title,
-        content: newDocTemplate(title),
-      },
-    })
-    return NextResponse.json({ id: doc.id, title: doc.title }, { status: 201 })
+    const ownerName = normName(body?.owner)
+
+    // Share keys are unique in the DB; a collision with an existing key is
+    // a 1-in-billions event, but the retry loop makes it a non-issue.
+    let doc: { id: string; title: string; shareKey: string | null } | null = null
+    for (let attempt = 0; attempt < 3 && !doc; attempt++) {
+      try {
+        doc = await db.document.create({
+          data: {
+            title,
+            content: newDocTemplate(title),
+            ownerName,
+            shareKey: newShareKey(),
+          },
+        })
+      } catch (err: unknown) {
+        // P2002 = unique-constraint violation (shareKey collision) -> retry
+        // with a new key. Any other error is a real failure and rethrows.
+        if ((err as { code?: string })?.code !== 'P2002') throw err
+      }
+    }
+    if (!doc) throw new Error('shareKey collision retries exhausted')
+
+    return NextResponse.json(
+      { id: doc.id, title: doc.title, shareKey: doc.shareKey },
+      { status: 201 }
+    )
   } catch (err) {
     console.error('POST /api/documents failed:', err)
     return NextResponse.json({ error: 'Failed to create document' }, { status: 500 })

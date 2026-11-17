@@ -38,12 +38,15 @@ import {
   Loader2,
   Pencil,
   Save,
+  Share2,
+  ShieldAlert,
   Wifi,
 } from 'lucide-react'
 import { AboutOTDialog } from './about-ot'
 import { CollabEditor } from './collab-editor'
 import { MarkdownPreview } from './markdown-preview'
 import { PresenceBar } from './presence-bar'
+import { ShareDialog } from './share-dialog'
 import { ThemeToggle } from './theme-toggle'
 import { VersionPanel } from './version-panel'
 import { useDocSync, type EditorApi } from './use-doc-sync'
@@ -95,15 +98,38 @@ export function EditorScreen({
   const [viewMode, setViewMode] = useState<ViewMode>('split')
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  // Access state from the metadata fetch: null = still loading, false =
+  // 403 (outsider), true = owner. Drives rename/share affordances.
+  const [isOwner, setIsOwner] = useState<boolean | null>(null)
+  const [noAccess, setNoAccess] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
-  // Load the document title. The screen is remounted per doc (key={docId}),
-  // so this effect runs once per document.
+  // Load the document title (and ownership). The screen is remounted per
+  // doc (key={docId}), so this effect runs once per document. The user
+  // query param scopes the fetch; a 403 means this profile was not invited.
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/documents/${docId}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    fetch(
+      `/api/documents/${docId}?user=${encodeURIComponent(profile.name)}`,
+      { cache: 'no-store' }
+    )
+      .then(async (r) => {
+        if (r.status === 403) {
+          if (!cancelled) {
+            setNoAccess(true)
+            setIsOwner(false)
+          }
+          return null
+        }
+        if (!r.ok) return Promise.reject()
+        return r.json()
+      })
       .then((d) => {
-        if (!cancelled && !titleDirty) setTitle(d.title)
+        if (!d) return
+        if (!cancelled) {
+          setIsOwner(d.isOwner)
+          if (!titleDirty) setTitle(d.title)
+        }
       })
       .catch(() => {
         if (!cancelled) setTitle('Untitled document')
@@ -111,7 +137,7 @@ export function EditorScreen({
     return () => {
       cancelled = true
     }
-  }, [docId])
+  }, [docId, profile.name])
 
   // Surface sync errors as toasts.
   useEffect(() => {
@@ -125,20 +151,24 @@ export function EditorScreen({
   }, [sync.docError])
 
   /**
-   * Persist the renamed title via PATCH. Runs on blur or Enter; nothing
-   * happens for empty titles. Best-effort: a failed PATCH is swallowed and
-   * the local title keeps the user's value until reload.
+   * Persist the renamed title via PATCH (owner-only server-side; the
+   * input is disabled for non-owners). Runs on blur or Enter; nothing
+   * happens for empty titles. Best-effort: a failed PATCH is swallowed
+   * and the local title keeps the user's value until reload.
    */
   const saveTitle = useCallback(async () => {
     setTitleDirty(false)
     const t = (title ?? '').trim()
-    if (!t || !docId) return
-    await fetch(`/api/documents/${docId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: t }),
-    }).catch(() => {})
-  }, [title, docId])
+    if (!t || !docId || !isOwner) return
+    await fetch(
+      `/api/documents/${docId}?user=${encodeURIComponent(profile.name)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: t }),
+      }
+    ).catch(() => {})
+  }, [title, docId, isOwner, profile.name])
 
   // Cheap derived stats for the status bar; recomputed per render on the
   // merged document text (trimming yields word count in the usual way).
@@ -166,6 +196,27 @@ export function EditorScreen({
       </span>
     )
 
+  // Outsider screen: this profile was not invited (403 from the API).
+  // The sync service enforces the same rule, so there is nothing live to
+  // show — offer the invite path instead.
+  if (noAccess) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+        <ShieldAlert className="h-10 w-10 text-amber-500" />
+        <div>
+          <h1 className="text-lg font-semibold">You do not have access to this document</h1>
+          <p className="mt-1 max-w-md text-sm text-muted-foreground">
+            Ask the owner to share its invite key with you, then use “Join with key” on
+            your documents screen — or just open the shared link.
+          </p>
+        </div>
+        <Button variant="outline" onClick={onBack}>
+          Back to documents
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       {/* Header */}
@@ -186,7 +237,8 @@ export function EditorScreen({
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
-          disabled={title === null}
+          disabled={title === null || !isOwner}
+          readOnly={!isOwner}
           aria-label="Document title"
           placeholder="Untitled document"
           className="min-w-0 max-w-48 flex-1 truncate rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-medium outline-none hover:border-border focus:border-border sm:max-w-xs"
@@ -196,6 +248,17 @@ export function EditorScreen({
           {statusDot}
         </div>
         <div className="flex items-center gap-0.5 sm:gap-1">
+          {isOwner && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Share / invite"
+              title="Share / invite"
+              onClick={() => setShareOpen(true)}
+            >
+              <Share2 className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -337,6 +400,12 @@ export function EditorScreen({
         }}
       />
       <AboutOTDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+      <ShareDialog
+        docId={docId}
+        user={profile.name}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
     </div>
   )
 }

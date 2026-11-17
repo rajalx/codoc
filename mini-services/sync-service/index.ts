@@ -150,6 +150,33 @@ async function loadDoc(docId: string): Promise<DocState | null> {
 
 const loadingDocs = new Map<string, Promise<DocState | null>>()
 
+/**
+ * Share-key access check for doc:join. Returns true when `name` may open
+ * the document: public docs (ownerName "" — e.g. the seeded Welcome doc),
+ * the owner themselves, or a user recorded in the Collaborator table
+ * (joined via share key). Mirrors the REST API's visibility rules so the
+ * socket path is not an access bypass. Unknown documents return true —
+ * joinDoc's loadDoc emits the proper "not found" error for those.
+ */
+async function canJoin(docId: string, name: string): Promise<boolean> {
+  try {
+    const res = await pool.query('SELECT "ownerName" FROM "Document" WHERE id = $1', [docId])
+    if (res.rowCount === 0) return true
+    const owner = (res.rows[0].ownerName as string | null) ?? ''
+    if (owner === '' || owner === name) return true
+    const collab = await pool.query(
+      'SELECT 1 FROM "Collaborator" WHERE "documentId" = $1 AND "userName" = $2 LIMIT 1',
+      [docId, name]
+    )
+    return (collab.rowCount ?? 0) > 0
+  } catch (err) {
+    // Fail closed: the DB is broken, so loadDoc would fail right after
+    // anyway — rejecting with a clear message beats a cryptic failure.
+    console.error('[auth] access check failed for doc', docId, err)
+    return false
+  }
+}
+
 async function flushDoc(doc: DocState): Promise<void> {
   if (!doc.dirty && doc.pendingOpRows.length === 0) return
   const client = await pool.connect()
@@ -274,6 +301,13 @@ async function joinDoc(socket: Socket, docId: string, name: string, color: strin
       }
     }
     socket.leave(roomFor(prevId))
+  }
+
+  // Share-key access check: outsiders get a clear error instead of the
+  // document (mirrors the REST API's visibility rules).
+  if (!(await canJoin(docId, name))) {
+    socket.emit('doc:error', { message: 'You have not been invited to this document.' })
+    return
   }
 
   const doc = await loadDoc(docId)
