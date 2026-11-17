@@ -68,9 +68,10 @@ version snapshots are persisted to PostgreSQL.
 | 3 | 👥 Live cursors & presence | See who is in the document, what color they are, and where their caret is. |
 | 4 | 📝 Markdown editing + preview | Side-by-side Markdown editing with rendered preview (GFM support). |
 | 5 | 🕘 Version history | Automatic snapshots every 40 operations, manual "save version", one-click **restore** from the timeline. |
-| 6 | 🗂️ Document dashboard | Home screen listing all documents with previews, create/rename/delete. |
+| 6 | 🗂️ Document dashboard | Home screen listing your documents and those shared with you, with previews, create/rename/delete. |
 | 7 | 🌗 Dark / light theme | Full theme support via `next-themes`. |
 | 8 | 🛡️ Operation audit log | Every applied operation batch is recorded in an append-only `OperationEntry` table. |
+| 9 | 🔐 Document ownership & share keys | You only see documents you own or were invited to; owners invite others with a short share key (edit access). |
 
 ---
 
@@ -267,18 +268,20 @@ insert/delete operations, all replicas transform and converge to the **same fina
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api` | Health check |
-| `GET` | `/api/documents` | List all documents (with previews; seeds the welcome doc) |
-| `POST` | `/api/documents` | Create a document |
-| `GET` | `/api/documents/[id]` | Fetch document metadata |
-| `PATCH` | `/api/documents/[id]` | Rename a document |
-| `DELETE` | `/api/documents/[id]` | Delete a document (cascades versions + ops) |
+| `GET` | `/api/documents?user=<name>` | List documents visible to `user` (owned, shared, or public) |
+| `POST` | `/api/documents` | Create a document (owned by `owner`; returns its share key) |
+| `GET` | `/api/documents/[id]?user=<name>` | Fetch document metadata (403 for users without access) |
+| `PATCH` | `/api/documents/[id]?user=<name>` | Rename a document (owner only) |
+| `DELETE` | `/api/documents/[id]?user=<name>` | Delete a document (owner only) |
+| `GET` | `/api/documents/[id]/share?user=<name>` | Get the share key (owner only) |
+| `POST` | `/api/documents/join` | Join by share key `{ shareKey, user }` — grants edit access |
 | `GET` | `/api/documents/[id]/versions` | List version snapshots (newest first, max 100) |
 
 ### WebSocket Events (sync service, port 3003)
 
 | Event | Direction | Purpose |
 |-------|-----------|---------|
-| `join` | client → server | Join a document room with a display name |
+| `join` | client → server | Join a document room with a display name (rejected unless owner, share-key collaborator, or public doc) |
 | `ops` | client → server | Submit an operation batch at a base revision |
 | `apply` | server → client | Broadcast of applied, transformed operations |
 | `presence` | bidirectional | Editors in the room (name + color) and caret positions |

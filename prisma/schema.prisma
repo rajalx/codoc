@@ -44,6 +44,17 @@ model Document {
   /// Row creation time. Immutable in practice.
   createdAt DateTime @default(now())
 
+  /// Display name of the user who created this document (client-claimed,
+  /// no auth in this app). Documents with ownerName "" are "public" — only
+  /// the seeded Welcome document uses this; everyone can see and join them.
+  ownerName String   @default("")
+
+  /// Short share code (8 lowercase chars). The owner hands it out; joining
+  /// with it (POST /api/documents/join) adds the presenter as a collaborator
+  /// with edit access. Nullable because legacy rows predate the feature;
+  /// the share endpoint lazily generates a key for such rows.
+  shareKey  String?  @unique
+
   /// Last-write timestamp, maintained by Prisma on every update through
   /// this client. Drives the "recently updated" ordering of
   /// GET /api/documents. Caveat: the sync service sets `updatedAt`
@@ -56,6 +67,8 @@ model Document {
   /// Append-only operation audit log; the DB is the durable replay log
   /// for what the sync service applied in memory.
   operations  OperationEntry[]
+  /// Users (display names) invited via the share key. Edit access.
+  collaborators Collaborator[]
 }
 
 /// A snapshot in the version timeline, created exclusively by the sync
@@ -145,4 +158,34 @@ model OperationEntry {
   /// entries for a document up to a given revision) without scanning
   /// unrelated documents first.
   @@index([documentId, revision])
+}
+
+/// An invited collaborator on a document. Joining with the document's
+/// share key (POST /api/documents/join) creates one of these rows and
+/// grants the invited user (edit access).
+///
+/// Identity model: `userName` is a display name, NOT a user id — this
+/// application has no authentication, so identity is whatever name the
+/// client presents. Uniqueness is per (document, name): re-joining with
+/// the same share key is idempotent for the same display name.
+model Collaborator {
+  /// UUID (v4) primary key.
+  id         String   @id @default(uuid())
+
+  /// Owning document. Deleted with it (onDelete: Cascade) — deleting a
+  /// document removes its share list too.
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// Display name of the invited user (client-claimed, no auth).
+  userName   String
+
+  /// When the invite was accepted (first join with the share key).
+  addedAt    DateTime @default(now())
+
+  /// One row per (document, display name): idempotent re-joins.
+  @@unique([documentId, userName])
+  /// Serves the "documents shared with me" home-screen query
+  /// (GET /api/documents?user=...), which looks up by userName.
+  @@index([userName])
 }
