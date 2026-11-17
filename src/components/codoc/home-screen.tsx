@@ -192,9 +192,9 @@ export function HomeScreen({ onOpen }: { onOpen: (docId: string) => void }) {
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">My Workspace</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Collaborative workspace</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              See collaborators' cursor positions and editing activity.
+              To create , organize and share your's ideas.   
             </p>
           </div>
           <Button
