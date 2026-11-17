@@ -161,7 +161,7 @@ export function HomeScreen({ onOpen }: { onOpen: (docId: string) => void }) {
    */
   const deleteDoc = async (id: string) => {
     setDeleteId(null)
-    await fetch(`/api/documents/${id}`, { method: 'DELETE' }).catch(() => {})
+    await fetch(`/api/documents/${id}`, { method: 'DELETE' }).catch(() => { })
     setDocs((d) => (d ? d.filter((x) => x.id !== id) : d))
   }
 
@@ -285,9 +285,8 @@ export function HomeScreen({ onOpen }: { onOpen: (docId: string) => void }) {
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
-            CoDoc — real-time collaborative Markdown editor
+            CoDoc - real-time collaborative Markdown editor
           </span>
-          <span>Operational transform sync · socket.io · PostgreSQL</span>
         </div>
       </footer>
 
